@@ -1,16 +1,11 @@
 # demo_llm_gemini
 
-A new Flutter project.
+To use the Gemini API, you'll need an API key. If you don't already have one,
+create a key in Google AI Studio: https://aistudio.google.com/app/apikey.
 
-## Getting Started
+When running the app, include your API key using the `--dart-define` flag:
 
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+flutter run --dart-define=API_KEY=$GEMINI_API_KEY
+```
+This will allow you to access the Gemini API from your app.
