@@ -3,11 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import '../models/message.dart';
 
-class ChatRepository {
+class ChatGeminiRepository {
   final GenerativeModel _model;
   late final ChatSession _chat;
 
-  ChatRepository({required String apiKey})
+  ChatGeminiRepository({required String apiKey})
       : _model = GenerativeModel(
           model: 'gemini-1.5-flash-latest',
           apiKey: apiKey,

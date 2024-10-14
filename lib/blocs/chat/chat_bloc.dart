@@ -1,11 +1,12 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../repositories/chat_langchain_repository.dart';
 import 'chat_event.dart';
 import 'chat_state.dart';
-import '../../../repositories/chat_repository.dart';
+import '../../../repositories/chat_gemini_repository.dart';
 import '../../../models/message.dart';
 
 class ChatBloc extends Bloc<ChatEvent, ChatState> {
-  final ChatRepository chatRepository;
+  final chatRepository;
   final List<Message> _messages = [];
 
   ChatBloc({required this.chatRepository}) : super(ChatInitial()) {
