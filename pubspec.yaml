@@ -41,6 +41,7 @@ dependencies:
   langchain_google: any
   langchain_openai: any
   langchain_community: any
+  typewritertext: any
 
 
 

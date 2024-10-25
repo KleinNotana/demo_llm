@@ -3,8 +3,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../models/chat_session.dart';
 import 'message_widget.dart';
 import 'typing_indicator.dart';
 import '../models/message.dart';
@@ -38,7 +40,7 @@ class _ChatWidgetState extends State<ChatWidget> {
 
   void _scrollDown() {
     WidgetsBinding.instance.addPostFrameCallback(
-          (_) => _scrollController.animateTo(
+      (_) => _scrollController.animateTo(
         _scrollController.position.maxScrollExtent,
         duration: const Duration(milliseconds: 750),
         curve: Curves.easeOutCirc,
@@ -62,6 +64,14 @@ class _ChatWidgetState extends State<ChatWidget> {
       });
       _scrollDown();
     }
+  }
+
+  Future<void> _saveChatSession() async {
+    context.read<ChatBloc>().add(SaveChatSession());
+  }
+
+  Future<void> _loadSessionList() async {
+    context.read<ChatBloc>().add(LoadSessionList());
   }
 
   void _sendImagePrompt(String message, List<String> imagePaths) {
@@ -95,14 +105,16 @@ class _ChatWidgetState extends State<ChatWidget> {
   Null Function() _handleRegenerateMessage(Message? reMessage) {
     return () {
       if (reMessage != null) {
-        context.read<ChatBloc>().add(SendImagePrompt(
-          reMessage.text ?? 'Describe the image(s)',
-          reMessage.images ?? [],
-        ));
-
+        context.read<ChatBloc>().add(SendTextMessage(
+              reMessage.text ?? '',
+            ));
         _scrollDown();
       }
     };
+  }
+
+  void _loadSession(ChatSession session) {
+    context.read<ChatBloc>().add(LoadChatSession(session.id));
   }
 
   @override
@@ -117,202 +129,269 @@ class _ChatWidgetState extends State<ChatWidget> {
       ),
     );
 
-    return Padding(
-      padding: const EdgeInsets.all(15),
-      child: Column(
-        // mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: BlocConsumer<ChatBloc, ChatState>(
-              listener: (context, state) {
-                if (state is ChatLoaded) {
-                  _scrollDown();
-                } else if (state is ChatError) {
-                  _showError(state.error);
-                }
+    return Scaffold(
+        appBar: AppBar(
+          title: const Text('Flutter ChatBot + Gemini'),
+          actions: [
+            IconButton(
+              onPressed: () {
+                context.read<ChatBloc>().add(CreateNewChatSession());
               },
-              builder: (context, state) {
-                List<Message> messages = [];
-                bool isLoading = false;
+              icon: const Icon(Icons.add_box_outlined),
+            ),
+          ],
+        ),
+        onDrawerChanged: (isOpened) {
+          if (isOpened) {
+            _loadSessionList();
+          }
+        },
+        drawer: Drawer(
+          child: BlocBuilder<ChatBloc, ChatState>(
+            builder: (context, state) {
+              List<ChatSession> chatSessions = [];
 
-                if (state is ChatInitial) {
-                  return const Center(
-                      child: Text(
+              if (state is ChatLoaded) {
+                chatSessions = state.chatSessions;
+              }
+
+              return ListView.builder(
+                itemCount: chatSessions.length,
+                itemBuilder: (context, index) {
+                  return ListTile(
+                    title: Text('Session ${chatSessions[index].id}'),
+                    onTap: () {
+                      _loadSession(chatSessions[index]);
+                      Navigator.of(context).pop();
+                    },
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        body: Padding(
+          padding: const EdgeInsets.all(15),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: BlocConsumer<ChatBloc, ChatState>(
+                  listener: (context, state) {
+                    if (state is ChatLoaded) {
+                      _scrollDown();
+                    } else if (state is ChatError) {
+                      _showError(state.error);
+                    }
+                  },
+                  builder: (context, state) {
+                    List<Message> messages = [];
+                    bool isLoading = false;
+                    var streamController =
+                        context.read<ChatBloc>().streamController;
+
+                    if (state is ChatInitial) {
+                      return const Center(
+                          child: Text(
                         'Start Chatting',
                         style: TextStyle(fontSize: 20),
                       ));
-                } else if (state is ChatLoaded) {
-                  messages = state.messages;
-                  isLoading = state.isLoading;
-                } else if (state is ChatError) {
-                  // In case of error, still show existing messages
-                }
-                return ListView.builder(
-                  controller: _scrollController,
-                  itemCount: messages.length + (isLoading ? 1 : 0),
-                  itemBuilder: (context, idx) {
-                    if (idx < messages.length) {
-                      final message = messages[idx];
-                      final previousMessage =
-                      idx > 0 ? messages[idx - 1] : null;
-                      return Column(
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        children: [
-                          MessageWidget(
-                            text: message.text,
-                            images: message.images,
-                            isFromUser: message.isFromUser,
-                          ),
-                          if (!message.isFromUser)
-                            Container(
-                              margin: const EdgeInsets.only(left: 5, top: 0),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.start,
-                                children: [
-                                  IconButton(
-                                    onPressed: _handleCopyMessage(message),
-                                    icon: const Icon(
-                                      Icons.copy,
-                                      color: Color(0xfffbfbfb),
-                                      size: 15,
-                                    ),
-                                  ),
-                                  IconButton(
-                                    onPressed: _handleRegenerateMessage(
-                                        previousMessage),
-                                    icon: const Icon(
-                                      Icons.refresh,
-                                      color: Color(0xfffbfbfb),
-                                      size: 20,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                        ],
-                      );
-                    } else {
-                      // Display TypingIndicator at the end of the list
-                      return const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 10),
-                        child: TypingIndicator(),
-                      );
+                    } else if (state is ChatLoaded) {
+                      messages = state.messages;
+                      isLoading = state.isLoading;
+                    } else if (state is ChatError) {
+                      // In case of error, still show existing messages
                     }
-                  },
-                );
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: !_needToResetImage && _imagePaths.isNotEmpty
-                ? SizedBox(
-              height: 100,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: _imagePaths.length,
-                itemBuilder: (context, index) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: kIsWeb
-                          ? Image.network(
-                        _imagePaths[index],
-                        width: 80,
-                        height: 80,
-                        fit: BoxFit.cover,
-                      )
-                          : Image.file(
-                        File(_imagePaths[index]),
-                        width: 80,
-                        height: 80,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  );
-                },
-              ),
-            )
-                : const SizedBox.shrink(),
-          ),
-          Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF2f2f2f),
-                borderRadius: BorderRadius.circular(90),
-                border: Border.all(
-                  color: const Color(0xFF2f2f2f),
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 5,
-                  horizontal: 10,
-                ),
-                child: Row(
-                  children: [
-                    IconButton(
-                      onPressed: _pickImages,
-                      icon: const Icon(
-                        Icons.image,
-                        color: Color(0xfffbfbfb),
-                      ),
-                    ),
-                    Expanded(
-                      child: TextField(
-                        autofocus: true,
-                        focusNode: _textFieldFocus,
-                        decoration: textFieldDecoration,
-                        controller: _textController,
-                        onSubmitted: _sendChatMessage,
-                        cursorColor: const Color(0xfffbfbfb),
-                      ),
-                    ),
-                    BlocBuilder<ChatBloc, ChatState>(
-                      builder: (context, state) {
-                        bool isLoading = false;
-                        if (state is ChatLoaded) {
-                          isLoading = state.isLoading;
-                        } else if (state is ChatInitial) {
-                          isLoading = false;
-                        } else if (state is ChatError) {
-                          isLoading = false;
-                        }
-                        if (isLoading) {
+
+                    // print messages to console
+                    for (var message in messages) {
+                      print(message.text);
+                      print(message.isFromUser);
+                    }
+
+                    return ListView.builder(
+                      controller: _scrollController,
+                      itemCount: messages.length + (isLoading ? 1 : 0),
+                      itemBuilder: (context, idx) {
+                        if (idx < messages.length) {
+                          final message = messages[idx];
+                          final previousMessage =
+                              idx > 0 ? messages[idx - 1] : null;
+                          return Column(
+                            mainAxisAlignment: MainAxisAlignment.start,
+                            children: [
+                              if (message.isFromUser)
+                                MessageWidget(
+                                  text: message.text!,
+                                  stream: streamController,
+                                  images: message.images,
+                                  isFromUser: message.isFromUser,
+                                  isStreamData: !(message.isFromUser),
+                                ),
+                              if (!message.isFromUser)
+                                Container(
+                                  margin:
+                                      const EdgeInsets.only(left: 5, top: 0),
+                                  child: Column(
+                                    children: [
+                                      MessageWidget(
+                                          text: message.text!,
+                                          stream: streamController,
+                                          images: message.images,
+                                          isFromUser: message.isFromUser,
+                                          isStreamData: message.isFromUser),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.start,
+                                        children: [
+                                          IconButton(
+                                            onPressed:
+                                                _handleCopyMessage(message),
+                                            icon: const Icon(
+                                              Icons.copy,
+                                              color: Color(0xfffbfbfb),
+                                              size: 15,
+                                            ),
+                                          ),
+                                          IconButton(
+                                            onPressed: _handleRegenerateMessage(
+                                                previousMessage),
+                                            icon: const Icon(
+                                              Icons.refresh,
+                                              color: Color(0xfffbfbfb),
+                                              size: 20,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          );
+                        } else {
+                          // Display TypingIndicator at the end of the list
                           return const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 8.0),
-                            child: SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(),
-                            ),
+                            padding: EdgeInsets.symmetric(vertical: 10),
+                            child: TypingIndicator(),
                           );
                         }
-                        return IconButton(
-                          onPressed: () {
-                            if (_imagePaths.isNotEmpty) {
-                              print('Image paths after click: $_imagePaths');
-                              _sendImagePrompt(
-                                  _textController.text, _imagePaths);
-                            } else {
-                              _sendChatMessage(_textController.text);
-                            }
-                            _textFieldFocus.unfocus();
+                      },
+                    );
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: !_needToResetImage && _imagePaths.isNotEmpty
+                    ? SizedBox(
+                        height: 100,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _imagePaths.length,
+                          itemBuilder: (context, index) {
+                            return Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 4),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: kIsWeb
+                                    ? Image.network(
+                                        _imagePaths[index],
+                                        width: 80,
+                                        height: 80,
+                                        fit: BoxFit.cover,
+                                      )
+                                    : Image.file(
+                                        File(_imagePaths[index]),
+                                        width: 80,
+                                        height: 80,
+                                        fit: BoxFit.cover,
+                                      ),
+                              ),
+                            );
                           },
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2f2f2f),
+                    borderRadius: BorderRadius.circular(90),
+                    border: Border.all(
+                      color: const Color(0xFF2f2f2f),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 5,
+                      horizontal: 10,
+                    ),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          onPressed: _pickImages,
                           icon: const Icon(
-                            Icons.send,
+                            Icons.image,
                             color: Color(0xfffbfbfb),
                           ),
-                        );
-                      },
+                        ),
+                        Expanded(
+                          child: TextField(
+                            autofocus: true,
+                            focusNode: _textFieldFocus,
+                            decoration: textFieldDecoration,
+                            controller: _textController,
+                            onSubmitted: _sendChatMessage,
+                            cursorColor: const Color(0xfffbfbfb),
+                          ),
+                        ),
+                        BlocBuilder<ChatBloc, ChatState>(
+                          builder: (context, state) {
+                            bool isLoading = false;
+                            if (state is ChatLoaded) {
+                              isLoading = state.isLoading;
+                            } else if (state is ChatInitial) {
+                              isLoading = false;
+                            } else if (state is ChatError) {
+                              isLoading = false;
+                            }
+                            if (isLoading) {
+                              return const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 8.0),
+                                child: SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(),
+                                ),
+                              );
+                            }
+                            return IconButton(
+                              onPressed: () {
+                                if (_imagePaths.isNotEmpty) {
+                                  print(
+                                      'Image paths after click: $_imagePaths');
+                                  _sendImagePrompt(
+                                      _textController.text, _imagePaths);
+                                } else {
+                                  _sendChatMessage(_textController.text);
+                                }
+                                _textFieldFocus.unfocus();
+                              },
+                              icon: const Icon(
+                                Icons.send,
+                                color: Color(0xfffbfbfb),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ))
-        ],
-      ),
-    );
+                  ))
+            ],
+          ),
+        ));
   }
 
   void _showError(String message) {

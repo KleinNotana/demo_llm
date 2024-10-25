@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import '../widgets/chat_widget.dart';
 
 class ChatScreen extends StatelessWidget {
@@ -8,11 +9,8 @@ class ChatScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-      ),
-      body: const ChatWidget(),
+    return const Scaffold(
+      body: ChatWidget(),
     );
   }
 }
